@@ -4,7 +4,7 @@ import jax.numpy as jnp
 
 
 def ScaledDotProductAttention(Q,K,V):
-    kq = Q @ K.T
+    kq = Q @ jnp.swapaxes(K, -1, -2)
     kq = kq / jnp.sqrt(K.size)
     kq = softmax(kq)
     return kq @ V

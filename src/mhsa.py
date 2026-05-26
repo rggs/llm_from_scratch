@@ -11,8 +11,6 @@ def _gen_self_attention(dk=64, dv=64, dmodel=512, key=jax.random.key(42)):
 
 
 def _gen_multi_head_self_attention(dmodel=512, h=8, dk=64, dv=64, key=jax.random.key(42)):
-    K = jax.random.uniform(key, (1, dmodel), maxval=0.001)
-    V = jax.random.uniform(key, (1, dmodel), maxval=0.001)
     Wo = jax.random.uniform(key, (h*dv, dmodel), maxval=0.001)
 
     heads = {}
@@ -30,8 +28,6 @@ def _gen_multi_head_self_attention(dmodel=512, h=8, dk=64, dv=64, key=jax.random
     wvs = jnp.stack(wvs, axis=0)
 
     params = {}
-    params["K"] = K
-    params["V"] = V
     params["Wo"] = Wo
     params["Wqs"] = wqs
     params["Wks"] = wks
@@ -40,9 +36,7 @@ def _gen_multi_head_self_attention(dmodel=512, h=8, dk=64, dv=64, key=jax.random
     return params
 
 @jax.jit
-def _forward_mhsa(Q, mhsa):
-    K = mhsa["K"]
-    V = mhsa["V"]
+def _forward_mhsa(Q,K,V, mhsa):
     Wo = mhsa["Wo"]
     Wqs = mhsa["Wqs"]
     Wks = mhsa["Wks"]
@@ -77,7 +71,8 @@ if __name__=="__main__":
     
     Q = jax.random.uniform(key, (1, 100, 512))
 
-    attn_output = _forward_mhsa(Q, mhsa)
+    # For Self-Attention, Q=K=V
+    attn_output = _forward_mhsa(Q, Q, Q, mhsa)
 
     print(attn_output)
     print(attn_output.shape)
