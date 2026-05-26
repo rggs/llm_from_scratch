@@ -3,7 +3,7 @@ import jax.numpy as jnp
 
 
 
-def ScaledDotProductAttention(K,Q,V):
+def ScaledDotProductAttention(Q,K,V):
     kq = Q @ K.T
     kq = kq / jnp.sqrt(K.size)
     kq = softmax(kq)
@@ -16,9 +16,9 @@ def softmax(z):
 
 if __name__ == "__main__":
     dim = 512
-    K = jnp.ones((dim, 1)) 
-    Q = jnp.ones((dim, 1))
-    V = jnp.ones((dim, 1))
+    K = jnp.ones((1, dim)) 
+    Q = jnp.ones((1, dim))
+    V = jnp.ones((1,dim))
 
 
-    print(ScaledDotProductAttention(K,Q,V))
+    print(ScaledDotProductAttention(Q,K,V))
