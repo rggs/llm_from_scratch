@@ -105,11 +105,14 @@ def _tokenize_substrings(vocab_dict, substrings):
     tokens = []
     for i, s in enumerate(substrings):
         s = s.replace("</w>", "")
-        if i == len(substrings) - 1:
-            token = vocab_dict[s]
+        if i != len(substrings) - 1:
+            s = s+"@@"
+
+        if s not in vocab_dict:
+            tokens.append(-1)
         else:
-            token = vocab_dict[s+"@@"]
-        tokens.append(token)
+            token = vocab_dict[s]
+            tokens.append(token)
     return tokens
 
 
