@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 from src.scaled_attention import softmax
 from jax.tree_util import register_pytree_node_class
+from src.optimizer import AdamWOptim, createAdamW
 
 
 
@@ -52,6 +53,10 @@ def ff_forward(layers, activations, x):
                 x = a(x)
     return x
 
+@jax.jit
+def relu(x):
+    return jnp.maximum(x, 0)
+
 
 #JAX one-hot encoding function
 def one_hot(x, k, dtype=jnp.float32):
@@ -68,14 +73,17 @@ if __name__ == "__main__":
     ds = ds.batch(batch_size).prefetch(1)
     train_set = tfds.as_numpy(ds)
 
-    layers, activations = create_ff([28*28,256,256,10], [None, None, softmax])
+    layers, activations = create_ff([28*28,256,256,10], [relu, relu, softmax])
+    m, v, = createAdamW(layers)
 
-    lr = 0.001
+    lr = 1e-5
     epochs = 20
     def mse_loss(layers, activations, x, y):
         preds = ff_forward(layers, activations, x)
         loss = jnp.sum((preds-y)**2)/x.shape[0]
         return loss
+
+    timesteps = 1
 
     for e in range(epochs):
         print(f"Epoch {e}")
@@ -94,7 +102,9 @@ if __name__ == "__main__":
             grads = jax.grad(mse_loss, argnums=0)(layers, activations, x, y)
 
             # Update our params
-            layers = jax.tree.map(lambda p, g: p - lr * g, layers, grads) 
+            # layers = jax.tree.map(lambda p, g: p - lr * g, layers, grads) 
+            layers, m, v = AdamWOptim(layers, grads, m, v, timesteps, lr=lr)
+            timesteps += 1
         acc = jnp.mean(jnp.array(epoch_acc)).item()
         print(f"Accuracy: {acc}")
 
