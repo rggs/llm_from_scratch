@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "importlib-resources>=7.1.0",
+    "pandas>=3.0.3",
     "tensorflow-datasets>=4.9.10",
 ]
 [project.optional-dependencies]

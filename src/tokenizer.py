@@ -1,9 +1,26 @@
 import jax
 import jax.numpy as jnp
 from collections import defaultdict
+import re
 
+PUNCT = r"""([.,!?:(){}])"""
+# There's no semi-colon here because of the special characters later on. In reality we'd want to do reject to preserve
+# the punctuation where it's legit
 
+NO_SPACE_BEFORE = {".", ",", "!", "?", ";", ":", ")", "]", "}", "%"}
+NO_SPACE_AFTER = {"(", "[", "{", "$", "£", "€", "“", "‘"}
 
+def handle_special_chars(text):
+    return ( text.replace("&", "&amp;").replace("|", "&#124;").replace("<", "&lt;")
+        .replace(">", "&gt;").replace("'", "&apos;").replace('"', "&quot;")
+        .replace("[", "&#91;").replace("]", "&#93;")
+    )
+
+def restore_special_chars(text):
+    return ( text.replace("&#93;", "]").replace("&#91;", "[").replace("&quot;", '"')
+        .replace("&apos;", "'").replace("&gt;", ">").replace("&lt;", "<")
+        .replace("&#124;", "|").replace("&amp;", "&")
+    )
 
 class Node:
 
@@ -19,15 +36,18 @@ class Node:
 
 
 
-def _construct_merge_trie(merge_filepath):
+def _construct_merge_trie(vocab_filepath):
     root_node = Node(None, "")
 
-    with open(merge_filepath, 'r') as f:
-        for line in f:
+    with open(vocab_filepath, 'r') as f:
+        for i, line in enumerate(f):
             line = line.strip()
-            chars = line.replace(" ", "")
-            if chars[0] == "#":
+            if line[0] == "#" and i == 0:
                 continue
+            if line.endswith("@@"):
+                chars = line[:-2]
+            else:
+                chars = line + "</w>"
             current_node = root_node
             for c in chars:
                 in_tree = False
@@ -94,12 +114,14 @@ def _find_optimal_tokenization(word, trie):
 
 def _generate_token_hashmap(vocab_filename):
     vocab_dict = {}
+    token_dict = {}
     with open(vocab_filename, "r") as f:
         for i, line in enumerate(f):
             line = line.strip()
             vocab_dict[line] = i
+            token_dict[i] = line
 
-    return vocab_dict
+    return vocab_dict, token_dict
 
 def _tokenize_substrings(vocab_dict, substrings):
     tokens = []
@@ -116,37 +138,89 @@ def _tokenize_substrings(vocab_dict, substrings):
     return tokens
 
 
+def construct_vocab_dict(bpe_filepath):
+    vocab_dict, token_dict = _generate_token_hashmap(bpe_filepath)
+    return vocab_dict, token_dict
+
+def encode(vocab_dict, trie, inputs: list[str]):
+    # Assume inputs is a list of strings, where each string is one or more words
+    tokenized_inputs = []
+    for text in inputs:
+        tokens = []
+        text = handle_special_chars(text)
+        text = re.sub(PUNCT, r" \1 ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        text = text.split()
+        text = [t + "</w>" for t in text]
+        for t in text:
+            chunks = _find_optimal_tokenization(t, trie)
+            if chunks is None:
+                print("Could not tokenize:", repr(t))
+                tokens.append(-1)
+                continue
+            tokens += _tokenize_substrings(vocab_dict, chunks)
+        tokenized_inputs.append(tokens)
+    return tokenized_inputs
+
+
+def decode(token_dict, inputs: list[int]):
+    outputs = []
+    for tokens in inputs:
+        strings = [token_dict[t] for t in tokens]
+        text = ""
+        for s in strings:
+            if not text:
+                text = s
+            elif s in NO_SPACE_BEFORE:
+                text += s
+            elif text[-1] in NO_SPACE_AFTER:
+                text += s
+            else:
+                text += " " + s
+        text = restore_special_chars(text)
+        outputs.append(text)
+    return outputs
+        
+
+    
+
+
 
 if __name__ == "__main__":
-    filepath = "/home/rgswope/workspace/llm_from_scratch/data/bpe.32000"
+    filepath = "/home/rgswope/workspace/llm_from_scratch/data/vocab.bpe.32000"
+    vocab_dict, token_dict = _generate_token_hashmap(filepath)
     root_node = _construct_merge_trie(filepath)
-    print([c.value for c in root_node.children.values()])
-    node = root_node.children['t']
-    while node is not None:
-        children = list(node.children.values())
-        if len(children) > 0:
-            child = children[len(children)//2]
-            node = child
-        else:
-            break
-    print(node.full_value)
+    # print([c.value for c in root_node.children.values()])
+    # node = root_node.children['t']
+    # while node is not None:
+    #     children = list(node.children.values())
+    #     if len(children) > 0:
+    #         child = children[len(children)//2]
+    #         node = child
+    #     else:
+    #         break
+    # print(node.full_value)
 
-    # Look for breakthrough</w>
-    substrings = _search_trie(root_node, "breakthrough</w>")
-    print(substrings)
+    # # Look for breakthrough</w>
+    # substrings = _search_trie(root_node, "breakthrough</w>")
+    # print(substrings)
 
 
-    bt = _find_optimal_tokenization("breakthrough</w>", root_node)
-    pe = _find_optimal_tokenization("perfidious</w>", root_node)
-    print(bt)
-    print(pe)
+    # bt = _find_optimal_tokenization("breakthrough</w>", root_node)
+    # pe = _find_optimal_tokenization("perfidious</w>", root_node)
+    # print(bt)
+    # print(pe)
 
-    vocab_dict = _generate_token_hashmap("/home/rgswope/workspace/llm_from_scratch/data/vocab.bpe.32000")
-    bt_tokens = _tokenize_substrings(vocab_dict, bt)
-    pe_tokens = _tokenize_substrings(vocab_dict, pe)
+    # bt_tokens = _tokenize_substrings(vocab_dict, bt)
+    # pe_tokens = _tokenize_substrings(vocab_dict, pe)
 
-    print(bt_tokens)
-    print(pe_tokens)
+    # print(bt_tokens)
+    # print(pe_tokens)
+    inputs = ["The rain in Spain falls mainly on the plain."]
+    tokenized_inputs = encode(vocab_dict, root_node, inputs)
+    print(tokenized_inputs)
+    decoded_strings = decode(token_dict, tokenized_inputs)
+    print(decoded_strings)
 
 
 
