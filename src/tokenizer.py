@@ -9,6 +9,8 @@ PUNCT = r"""([.,!?:(){}])"""
 
 NO_SPACE_BEFORE = {".", ",", "!", "?", ";", ":", ")", "]", "}", "%"}
 NO_SPACE_AFTER = {"(", "[", "{", "$", "£", "€", "“", "‘"}
+SPECIAL_TOKENS = ["<pad>", "<unk>", "<bos>", "<eos>"]
+
 
 def handle_special_chars(text):
     return ( text.replace("&", "&amp;").replace("|", "&#124;").replace("<", "&lt;")
@@ -113,13 +115,13 @@ def _find_optimal_tokenization(word, trie):
     
 
 def _generate_token_hashmap(vocab_filename):
-    vocab_dict = {}
-    token_dict = {}
+    vocab_dict = {tok: i for i, tok in enumerate(SPECIAL_TOKENS)}
+    token_dict = {i: tok for i, tok in enumerate(SPECIAL_TOKENS)}
     with open(vocab_filename, "r") as f:
         for i, line in enumerate(f):
             line = line.strip()
-            vocab_dict[line] = i
-            token_dict[i] = line
+            vocab_dict[line] = i + len(SPECIAL_TOKENS)
+            token_dict[i+len(SPECIAL_TOKENS)] = line
 
     return vocab_dict, token_dict
 
@@ -190,6 +192,9 @@ if __name__ == "__main__":
     filepath = "/home/rgswope/workspace/llm_from_scratch/data/vocab.bpe.32000"
     vocab_dict, token_dict = _generate_token_hashmap(filepath)
     root_node = _construct_merge_trie(filepath)
+    print(vocab_dict["<pad>"])
+    print(vocab_dict["<eos>"])
+    print(token_dict[0])
     # print([c.value for c in root_node.children.values()])
     # node = root_node.children['t']
     # while node is not None:
