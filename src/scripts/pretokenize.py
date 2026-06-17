@@ -1,7 +1,7 @@
 from src.tokenizer import _generate_token_hashmap, _construct_merge_trie, encode, decode
 import pandas as pd
 import json
-
+import sys
 
 
 if __name__ == "__main__":
@@ -22,6 +22,6 @@ if __name__ == "__main__":
                 for i, row in data.iterrows():
                     #opening the output file buffer lets us directly write out each row instead of aggregating
                     #rows in a dict, which also saves us memory
-                    output_dict = {c: encode(vocab_dict, root_node, str(row[c])) for c in row.index}
+                    output_dict = {c: encode(vocab_dict, root_node, [str(row[c])])[0] for c in row.index}
                     output.write(json.dumps(output_dict) + "\n")
 

@@ -3,7 +3,7 @@ import jax.numpy as jnp
 from collections import defaultdict
 import re
 
-PUNCT = r"""([.,!?:(){}])"""
+PUNCT = r"""([.,!?¿*_():{}+\\/=€$£°@%\-])"""
 # There's no semi-colon here because of the special characters later on. In reality we'd want to do reject to preserve
 # the punctuation where it's legit
 
@@ -13,10 +13,23 @@ SPECIAL_TOKENS = ["<pad>", "<unk>", "<bos>", "<eos>"]
 
 
 def handle_special_chars(text):
-    return ( text.replace("&", "&amp;").replace("|", "&#124;").replace("<", "&lt;")
+    # Normalize apostrophes
+    text = ( text.replace("\x92", "'").replace("’", "'").replace("‘", "'").replace("“", '"')
+                .replace("”", '"').replace("„", '"').replace("«", '"').replace("»", '"').replace("´", "'")
+                .replace("‐", "-").replace("–", "-").replace("—", "-").replace("�", "")
+    )
+    text = (text.replace("\xad", "").replace("…", " ... ").replace("-", "-").replace("#160;", " ")
+                .replace("&nbsp;", " ").replace("&#160;", " ").replace("&amp;", "&")
+    )
+    text = ( text.replace("&", "&amp;").replace("|", "&#124;").replace("<", "&lt;")
         .replace(">", "&gt;").replace("'", "&apos;").replace('"', "&quot;")
         .replace("[", "&#91;").replace("]", "&#93;")
     )
+    # Split out special chars:
+    escaped = ["&quot;", "&apos;", "&#91;", "&#93;", "&#124;", "&lt;", "&gt;", "&amp;"]
+    for esc in escaped:
+        text = text.replace(esc, f" {esc} ")
+    return text
 
 def restore_special_chars(text):
     return ( text.replace("&#93;", "]").replace("&#91;", "[").replace("&quot;", '"')
@@ -157,7 +170,7 @@ def encode(vocab_dict, trie, inputs: list[str]):
         for t in text:
             chunks = _find_optimal_tokenization(t, trie)
             if chunks is None:
-                print("Could not tokenize:", repr(t))
+                # print("Could not tokenize:", repr(t))
                 tokens.append(-1)
                 continue
             tokens += _tokenize_substrings(vocab_dict, chunks)
