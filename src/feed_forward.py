@@ -39,18 +39,20 @@ def create_ff(sizes, activations):
     for _ in range(len(activations)):
         _activations[f"act_{_}"] = activations[_]
 
-    return lin_layers, _activations
+    return lin_layers #, _activations
 
 
 
-def ff_forward(layers, activations, x):
+def ff_forward(layers, x):
     for i in range(len(layers)):
         l = layers[f"layer_{i}"]
         x = linear_forward(l[0], l[1], x)
-        if len(activations) > 0:
-            a = activations[f"act_{i}"]
-            if a is not None:
-                x = a(x)
+        x = relu(x)
+        # if len(activations) > 0:
+        #     a = activations[f"act_{i}"]
+        #     if a is not None:
+        #         if a == "relu":
+        #             x = relu(x)
     return x
 
 @jax.jit
@@ -73,7 +75,7 @@ if __name__ == "__main__":
     ds = ds.batch(batch_size).prefetch(1)
     train_set = tfds.as_numpy(ds)
 
-    layers, activations = create_ff([28*28,256,256,10], [relu, relu, softmax])
+    layers, activations = create_ff([28*28,256,256,10], ["relu", "relu", "softmax"])
     m, v, = createAdamW(layers)
 
     lr = 1e-5

@@ -45,9 +45,9 @@ def _forward_mha(Q,K,V, mhsa, mask=None):
     # Q has shape (b, seq, d_model)
     # Project to the 8 heads
     # We'll also put the stacked dim at the end
-    stacked_attention = jax.vmap(_single_head_forward, in_axes=[None, None, None, 0,0,0], out_axes=-1)
+    stacked_attention = jax.vmap(_single_head_forward, in_axes=[None, None, None, 0,0,0, None], out_axes=-1)
 
-    head_results = stacked_attention(Q, K, V, Wqs, Wks, Wvs, mask=mask)
+    head_results = stacked_attention(Q, K, V, Wqs, Wks, Wvs, mask)
     
     head_results = head_results.reshape(Q.shape[0], Q.shape[1], -1)
 

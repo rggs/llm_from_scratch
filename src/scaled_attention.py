@@ -15,6 +15,11 @@ def ScaledDotProductAttention(Q,K,V, mask=None):
 def softmax(z):
     return jnp.exp(z) / jnp.sum(jnp.exp(z), axis=-1, keepdims=True)
 
+def log_softmax(z):
+    z = z - jnp.max(z, axis=-1, keepdims=True)
+    _z = jnp.log(jnp.sum(jnp.exp(z), axis=-1, keepdims=True))
+    return z - _z
+
 
 if __name__ == "__main__":
     dim = 512

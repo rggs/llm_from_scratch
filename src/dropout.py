@@ -4,15 +4,16 @@ import sys
 
 
 
-def dropout(arr, P=0.1, key=jax.random.key(42)):
+def dropout(arr, key, P=0.1, train=True):
+    if not train or P==0.0:
+        return x
+    
+    prob = 1-P
     # First generate a uniform random matrix with the same shape as arr
-    mask = jax.random.uniform(key, arr.shape)
-    # Now, use P as a dropout threshold
-    mask = mask.at[mask>P].set(1)
-    mask = mask.at[mask<=P].set(0)
+    mask = jax.random.bernoulli(key, prob, arr.shape)
 
     # Now do element-wise mul between arr and mask
-    return arr * mask
+    return arr * mask / prob
 
 
 

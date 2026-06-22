@@ -7,47 +7,55 @@ from src.mha import _gen_multi_head_attention, _forward_mha
 from src.dropout import dropout
 from src.embedding import create_embedding_layer, gen_pos_encodings
 from src.optimizer import createAdamW, AdamWOptim
+from src.dropout import dropout
 
 
 h = 8
 dk = dv = 64
 dm = 512
 
+def layer_norm(x, eps=1e-6):
+    # Shape is ~ B, dmodel, dmodel
+    mean = jnp.mean(x, axis=-1, keepdims=True)
+    var = jnp.mean((x-mean)**2, axis=-1, keepdims=True)
+    return (x - mean) / jnp.sqrt(var + eps)
+
+
 def create_encoder(stacks=6, dmodel=512, heads=8):
     encoder_dict = {}
     for s in range(stacks):
-        encoder_dict[f"norm_{s}_0"] = relu
+        # encoder_dict[f"norm_{s}_0"] = "layer_norm"
         encoder_dict[f"mhsa_{s}"] = _gen_multi_head_attention()
-        encoder_dict[f"norm_{s}_1"] = relu
-        encoder_dict[f"ff_{s}"] = create_ff([dmodel, 2048, dmodel], activations=[relu, None])
+        # encoder_dict[f"norm_{s}_1"] = "layer_norm"
+        encoder_dict[f"ff_{s}"] = create_ff([dmodel, 2048, dmodel], activations=["relu", None])
     s+=1
-    encoder_dict[f"norm_{s}_0"] = relu
+    # encoder_dict[f"norm_{s}_0"] = "layer_norm"
     return encoder_dict
 
 
 def create_decoder(stacks=6, dmodel=512, heads=8):
     decoder_dict = {}
     for s in range(stacks):
-        decoder_dict[f"norm_{s}_0"] = relu
+        # decoder_dict[f"norm_{s}_0"] = "layer_norm"
         decoder_dict[f"mhma_{s}"] = _gen_multi_head_attention()
-        decoder_dict[f"norm_{s}_1"] = relu
+        # decoder_dict[f"norm_{s}_1"] = "layer_norm"
         decoder_dict[f"mhca_{s}"] = _gen_multi_head_attention()
-        decoder_dict[f"norm_{s}_2"] = relu
-        decoder_dict[f"ff_{s}"] = create_ff([dmodel, 2048, dmodel], activations=[relu, None])
+        # decoder_dict[f"norm_{s}_2"] = "layer_norm"
+        decoder_dict[f"ff_{s}"] = create_ff([dmodel, 2048, dmodel], activations=["relu", None])
     s+=1
-    decoder_dict[f"norm_{s}_0"] = relu
+    # decoder_dict[f"norm_{s}_0"] = "layer_norm"
     return decoder_dict
 
 def create_llm(stacks=6, dmodel=512, heads=8, vocab_size=37_000):
-    model_params = {"stacks":stacks}
+    model_params = {}
     model_params["embeddings"] = create_embedding_layer(vocab_size=vocab_size, model_size=dmodel)
     model_params["encoder"] = create_encoder(stacks=stacks, dmodel=dmodel, heads=heads)
     model_params["decoder"] = create_decoder(stacks=stacks, dmodel=dmodel, heads=heads)
     
     return model_params
 
-
-def model_forward(model_params, x, x_s):
+jax.random.key(42)
+def model_forward(model_params, x, x_s, key, stacks=2, training=True, p_dropout=0.1):
     # Create shifted targets
     # x_s = jnp.zeros((x.shape[0], x.shape[1]+1), dtype=int)
     # x_s = x_s.at[:,1:].add(x)
@@ -61,35 +69,52 @@ def model_forward(model_params, x, x_s):
     x_s = x_s + gen_pos_encodings(x_s.shape[1], x_s.shape[2])
 
     # Encoder forward
-    for s in range(model_params["stacks"]):
-        _x = model_params["encoder"][f"norm_{s}_0"](x)
-        _x = _forward_mha(_x, _x, _x, model_params["encoder"][f"mhsa_{s}"])
+    for s in range(stacks):
+        # if model_params["encoder"][f"norm_{s}_0"] == "layer_norm":
+        _x = _forward_mha(x, x, x, model_params["encoder"][f"mhsa_{s}"])
+        key, subkey = jax.random.split(key)
+        _x = dropout(_x, subkey, P=p_dropout, train=training)
         x = x + _x
-        _x = model_params["encoder"][f"norm_{s}_1"](x)
-        _x = ff_forward(model_params["encoder"][f"ff_{s}"][0], model_params["encoder"][f"ff_{s}"][1], _x)
+        x = layer_norm(x)
+        # if model_params["encoder"][f"norm_{s}_1"] == "layer_norm":
+        _x = ff_forward(model_params["encoder"][f"ff_{s}"], x)
+        key, subkey = jax.random.split(key)
+        _x = dropout(_x, subkey, P=p_dropout, train=training)
         x = x + _x
+        x = layer_norm(x)
 
     s += 1
-    x = model_params["encoder"][f"norm_{s}_0"](x)
+    # if model_params["encoder"][f"norm_{s}_0"] == "layer_norm":
+    # x = layer_norm(x)
 
-    for s in range(model_params["stacks"]):
-        _x = model_params["decoder"][f"norm_{s}_0"](x_s)
+    for s in range(stacks):
+        # if model_params["decoder"][f"norm_{s}_0"] == "layer_norm":
 
-        tri = jnp.tril(jnp.ones((_x.shape[1], _x.shape[1])))
-        attention_mask = jnp.tile(jnp.expand_dims(tri,0), [x.shape[0],1,1])
-        _x = _forward_mha(_x, _x, _x, model_params["decoder"][f"mhma_{s}"], mask=attention_mask)
+        tri = jnp.tril(jnp.ones((x_s.shape[1], x_s.shape[1])))
+        attention_mask = jnp.tile(jnp.expand_dims(tri,0), [x_s.shape[0],1,1])
+        _x = _forward_mha(x_s, x_s, x_s, model_params["decoder"][f"mhma_{s}"], mask=attention_mask)
+        key, subkey = jax.random.split(key)
+        _x = dropout(_x, subkey, P=p_dropout, train=training)
         x_s = x_s + _x
+        x_s = layer_norm(x_s)
 
-        _x = model_params["decoder"][f"norm_{s}_1"](x_s)
-        _x = _forward_mha(_x, x, x, model_params["decoder"][f"mhca_{s}"])
+        # if model_params["decoder"][f"norm_{s}_1"] == "layer_norm":
+        _x = _forward_mha(x_s, x, x, model_params["decoder"][f"mhca_{s}"])
+        key, subkey = jax.random.split(key)
+        _x = dropout(_x, subkey, P=p_dropout, train=training)
         x_s = x_s + _x
+        x_s = layer_norm(x_s)
 
-        _x = model_params["decoder"][f"norm_{s}_2"](x_s)
-        _x = ff_forward(model_params["decoder"][f"ff_{s}"][0], model_params["decoder"][f"ff_{s}"][1], _x)
+        # if model_params["decoder"][f"norm_{s}_2"] == "layer_norm":
+        _x = ff_forward(model_params["decoder"][f"ff_{s}"], x_s)
+        key, subkey = jax.random.split(key)
+        _x = dropout(_x, subkey, P=p_dropout, train=training)
         x_s = x_s + _x
+        x_s = layer_norm(x_s)
 
     s += 1
-    x_s = model_params["decoder"][f"norm_{s}_0"](x)
+    # if model_params["decoder"][f"norm_{s}_0"] == "layer_norm":
+    # x_s = layer_norm(x_s)
 
     # We need to swap axis in the embeddings to go back from embedding space to token space
     logits = x_s @ jnp.swapaxes(model_params["embeddings"], -1, -2)
@@ -102,7 +127,9 @@ if __name__ == "__main__":
     key = jax.random.key(42)
     model = create_llm(2)
     test_input = jax.random.randint(key, (8, 800), 0, 37000)
-    output = model_forward(model, test_input)
+    test_input_shifted = jnp.zeros((test_input.shape[0], test_input.shape[1]+1), dtype=int)
+    test_input_shifted = test_input_shifted.at[:,1:].add(test_input)
+    output = model_forward(model, test_input, test_input_shifted)
     print(output.shape)
 
 

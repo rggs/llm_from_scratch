@@ -26,3 +26,4 @@ wheels/
 *.egg
 data/*
 bin/*
+runs/*
