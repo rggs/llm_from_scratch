@@ -16,7 +16,7 @@ def _gen_multi_head_attention(dmodel=512, h=8, dk=64, dv=64, key=None):
     if key is None:
         key = jax.random.key(42)
     keys = jax.random.split(key, h+1)
-    Wo = jax.random.normal(keys[-1], (h*dv, dmodel)) * jnp.sqrt(2 / h*dv)
+    Wo = jax.random.normal(keys[-1], (h*dv, dmodel)) * jnp.sqrt(2 / (h*dv))
 
     heads = {}
     wqs = []

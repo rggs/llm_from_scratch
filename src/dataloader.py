@@ -47,7 +47,8 @@ class WMTDataLoader:
                 en[i] = en[i] + [PAD_IDX]*(en_length - len(en[i]))
 
                 de[i] = de[i][:de_length]
-                de[i] = de[i] + [PAD_IDX]*(de_length - len(de[i]))
+                de[i].append(3) # append eos token
+                de[i] = de[i] + [PAD_IDX]*(de_length - len(de[i]) + 1) # add one for the eos padded token
 
             yield (jnp.array(en), jnp.array(de))
 

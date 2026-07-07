@@ -13,6 +13,7 @@ from src.dropout import dropout
 h = 8
 dk = dv = 64
 dm = 512
+PAD_IDX = 0
 
 def layer_norm(x, eps=1e-6):
     # Shape is ~ B, dmodel, dmodel
@@ -69,6 +70,14 @@ def model_forward(model_params, x, x_s, key, stacks=2, training=True, p_dropout=
     # Create shifted targets
     # x_s = jnp.zeros((x.shape[0], x.shape[1]+1), dtype=int)
     # x_s = x_s.at[:,1:].add(x)
+    # Create the encoder & decoder masks here
+    encoder_not_pad = x != PAD_IDX
+    decoder_not_pad = x_s != PAD_IDX
+
+    encoder_mask = encoder_not_pad[:, None, :]
+    cross_mask = decoder_not_pad[:, None, :]
+    tri = jnp.tril(jnp.ones((x_s.shape[1], x_s.shape[1])))
+    decoder_mask = (tri[None, :, :] & decoder_not_pad[:, None, :])
 
     # perform embedding
     x = model_params["embeddings"][x]
@@ -81,7 +90,7 @@ def model_forward(model_params, x, x_s, key, stacks=2, training=True, p_dropout=
     # Encoder forward
     for s in range(stacks):
         # if model_params["encoder"][f"norm_{s}_0"] == "layer_norm":
-        _x = _forward_mha(x, x, x, model_params["encoder"][f"mhsa_{s}"])
+        _x = _forward_mha(x, x, x, model_params["encoder"][f"mhsa_{s}"], mask=encoder_mask)
         key, subkey = jax.random.split(key)
         _x = dropout(_x, subkey, P=p_dropout, train=training)
         x = x + _x
@@ -100,16 +109,14 @@ def model_forward(model_params, x, x_s, key, stacks=2, training=True, p_dropout=
     for s in range(stacks):
         # if model_params["decoder"][f"norm_{s}_0"] == "layer_norm":
 
-        tri = jnp.tril(jnp.ones((x_s.shape[1], x_s.shape[1])))
-        attention_mask = jnp.tile(jnp.expand_dims(tri,0), [x_s.shape[0],1,1])
-        _x = _forward_mha(x_s, x_s, x_s, model_params["decoder"][f"mhma_{s}"], mask=attention_mask)
+        _x = _forward_mha(x_s, x_s, x_s, model_params["decoder"][f"mhma_{s}"], mask=decoder_mask)
         key, subkey = jax.random.split(key)
         _x = dropout(_x, subkey, P=p_dropout, train=training)
         x_s = x_s + _x
         x_s = layer_norm(x_s)
 
         # if model_params["decoder"][f"norm_{s}_1"] == "layer_norm":
-        _x = _forward_mha(x_s, x, x, model_params["decoder"][f"mhca_{s}"])
+        _x = _forward_mha(x_s, x, x, model_params["decoder"][f"mhca_{s}"], mask=cross_mask)
         key, subkey = jax.random.split(key)
         _x = dropout(_x, subkey, P=p_dropout, train=training)
         x_s = x_s + _x

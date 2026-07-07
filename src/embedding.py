@@ -15,8 +15,8 @@ def create_embedding_layer(vocab_size=37_000, model_size=512):
 # Now we can tackle the positional encodings
 @jax.jit
 def _generate_pos_encoding(pos, dim, size=10_000, dmodel=512):
-    i = dim//2
-    return (((dim%2)+1)*jnp.sin(pos / (size**(2*i/dmodel)))) + (((dim%2)+0) * jnp.cos(pos / (size**(2*i/dmodel))))
+    angles = pos / (size ** (2 * (dims // 2) / dmodel))
+    return jnp.where(dim % 2 == 0, jnp.sin(angles), jnp.cos(angles))
 
 def gen_pos_encodings(seq_length, dmodel=512):
     position_indices = jnp.arange(seq_length)[:,None]

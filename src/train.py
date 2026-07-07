@@ -25,15 +25,16 @@ def clip_grads(g, maxnorm=1.):
 
 def calculate_train_batch_loss(model, x, y, key, stacks=2):
     # Create shifted input and target sequences
-    x_s = jnp.zeros((y.shape[0], y.shape[1]+1), dtype=int)
+    x_s = jnp.zeros((x.shape[0], x.shape[1]+1), dtype=int)
     x_s = x_s.at[:,1:].add(y)
     # 2 = <bos>
     x_s = x_s.at[:,0].add(2)
 
-    _y = jnp.zeros((y.shape[0], y.shape[1]+1), dtype=int)
-    y = _y.at[:, :-1].add(y)
+    # _y = jnp.zeros((y.shape[0], y.shape[1]+1), dtype=int)
+    # y = _y.at[:, :-1].add(y)
     # 3 = <eos>
-    y = y.at[:, -1].add(3)
+    # y = y.at[:, -1].add(3)
+    # we now add eos in dataloader
 
     logits = model_forward(model, x, x_s, key, stacks=stacks, training=True)
  
