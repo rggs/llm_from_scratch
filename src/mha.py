@@ -3,22 +3,28 @@ import jax.numpy as jnp
 from src.scaled_attention import softmax, ScaledDotProductAttention
 
 
-def _gen_attention(dk=64, dv=64, dmodel=512, key=jax.random.key(42)):
-    Wq = jax.random.uniform(key, (dmodel, dk), maxval=0.001)
-    Wk = jax.random.uniform(key, (dmodel, dk), maxval=0.001)
-    Wv = jax.random.uniform(key, (dmodel, dv), maxval=0.001)
+def _gen_attention(dk=64, dv=64, dmodel=512, keys=None):
+    if keys is None:
+        keys = [jax.random.key(42) for i in range(3)]
+    Wq = jax.random.normal(keys[0], (dmodel, dk)) * jnp.sqrt(2 / dmodel)
+    Wk = jax.random.normal(keys[1], (dmodel, dk)) * jnp.sqrt(2 / dmodel)
+    Wv = jax.random.normal(keys[2], (dmodel, dv)) * jnp.sqrt(2 / dmodel)
     return Wq, Wk, Wv
 
 
-def _gen_multi_head_attention(dmodel=512, h=8, dk=64, dv=64, key=jax.random.key(42)):
-    Wo = jax.random.uniform(key, (h*dv, dmodel), maxval=0.001)
+def _gen_multi_head_attention(dmodel=512, h=8, dk=64, dv=64, key=None):
+    if key is None:
+        key = jax.random.key(42)
+    keys = jax.random.split(key, h+1)
+    Wo = jax.random.normal(keys[-1], (h*dv, dmodel)) * jnp.sqrt(2 / h*dv)
 
     heads = {}
     wqs = []
     wks = []
     wvs = []
     for i in range(h):
-        wq, wk, wv = _gen_attention(key=jax.random.key(i))
+        w_keys = jax.random.split(keys[i], 3)
+        wq, wk, wv = _gen_attention(dk=dk, dv=dv, dmodel=dmodel, keys=w_keys)
         wqs.append(wq)
         wks.append(wk)
         wvs.append(wv)

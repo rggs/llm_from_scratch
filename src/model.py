@@ -21,40 +21,50 @@ def layer_norm(x, eps=1e-6):
     return (x - mean) / jnp.sqrt(var + eps)
 
 
-def create_encoder(stacks=6, dmodel=512, heads=8):
+def create_encoder(stacks=6, dmodel=512, heads=8, key=None):
+    if key is None:
+        key = jax.random.PRNGKey(42)
     encoder_dict = {}
     for s in range(stacks):
         # encoder_dict[f"norm_{s}_0"] = "layer_norm"
-        encoder_dict[f"mhsa_{s}"] = _gen_multi_head_attention()
+        key, mhsa_key, ff_key = jax.random.split(key, 3)
+        encoder_dict[f"mhsa_{s}"] = _gen_multi_head_attention(dk=int(dmodel/heads), dv=int(dmodel/heads), dmodel=dmodel, h=heads, key=mhsa_key)
         # encoder_dict[f"norm_{s}_1"] = "layer_norm"
-        encoder_dict[f"ff_{s}"] = create_ff([dmodel, 2048, dmodel], activations=["relu", None])
+        encoder_dict[f"ff_{s}"] = create_ff([dmodel, 2048, dmodel], activations=["relu", None], key=ff_key)
     s+=1
     # encoder_dict[f"norm_{s}_0"] = "layer_norm"
     return encoder_dict
 
 
-def create_decoder(stacks=6, dmodel=512, heads=8):
+def create_decoder(stacks=6, dmodel=512, heads=8, key=None):
+    if key is None:
+        key = jax.random.PRNGKey(42)
+
     decoder_dict = {}
     for s in range(stacks):
+        key, mhma_key, mhca_key, ff_key = jax.random.split(key, 4)
         # decoder_dict[f"norm_{s}_0"] = "layer_norm"
-        decoder_dict[f"mhma_{s}"] = _gen_multi_head_attention()
+        decoder_dict[f"mhma_{s}"] = _gen_multi_head_attention(dk=int(dmodel/heads), dv=int(dmodel/heads), dmodel=dmodel, h=heads, key=mhma_key)
         # decoder_dict[f"norm_{s}_1"] = "layer_norm"
-        decoder_dict[f"mhca_{s}"] = _gen_multi_head_attention()
+        decoder_dict[f"mhca_{s}"] = _gen_multi_head_attention(dk=int(dmodel/heads), dv=int(dmodel/heads), dmodel=dmodel, h=heads, key=mhca_key)
         # decoder_dict[f"norm_{s}_2"] = "layer_norm"
-        decoder_dict[f"ff_{s}"] = create_ff([dmodel, 2048, dmodel], activations=["relu", None])
+        decoder_dict[f"ff_{s}"] = create_ff([dmodel, 2048, dmodel], activations=["relu", None], key=ff_key)
     s+=1
     # decoder_dict[f"norm_{s}_0"] = "layer_norm"
     return decoder_dict
 
-def create_llm(stacks=6, dmodel=512, heads=8, vocab_size=37_000):
+def create_llm(stacks=6, dmodel=512, heads=8, vocab_size=37_000, key=None):
+    if key is None:
+        key = jax.random.key(42)
     model_params = {}
     model_params["embeddings"] = create_embedding_layer(vocab_size=vocab_size, model_size=dmodel)
-    model_params["encoder"] = create_encoder(stacks=stacks, dmodel=dmodel, heads=heads)
-    model_params["decoder"] = create_decoder(stacks=stacks, dmodel=dmodel, heads=heads)
+    key, _key = jax.random.split(key)
+    model_params["encoder"] = create_encoder(stacks=stacks, dmodel=dmodel, heads=heads, key=key)
+    key, _key = jax.random.split(key)
+    model_params["decoder"] = create_decoder(stacks=stacks, dmodel=dmodel, heads=heads, key=key)
     
     return model_params
 
-jax.random.key(42)
 def model_forward(model_params, x, x_s, key, stacks=2, training=True, p_dropout=0.1):
     # Create shifted targets
     # x_s = jnp.zeros((x.shape[0], x.shape[1]+1), dtype=int)

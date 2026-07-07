@@ -13,7 +13,6 @@ from src.optimizer import AdamWOptim, createAdamW
 # The goal will be to construct a feed forward net with dense linear layers and
 # activations. We already wrote softmax for attention, so we can just import and use that
 
-key = jax.random.PRNGKey(42)
 
 @jax.jit
 def linear_forward(W, b, x):
@@ -21,20 +20,23 @@ def linear_forward(W, b, x):
     x = x + b 
     return x
 
-def create_lin_layer(insize, outsize):
-    W = jax.random.uniform(key, shape=(insize, outsize), maxval=0.001)
-    b = jax.random.uniform(key, shape=(outsize), maxval=0.001)
+def create_lin_layer(insize, outsize, key=None):
+    if key is None:
+        key = jax.random.PRNGKey(42)
+
+    W = jax.random.normal(key, shape=(insize, outsize)) * jnp.sqrt(2 / insize)
+    b = jax.random.normal(key, shape=(outsize))
     return W, b
 
 
-def create_ff(sizes, activations):
+def create_ff(sizes, activations, key=None):
     # Either no activations, or have something in the activations list for each layer 
     assert len(activations)==len(sizes) - 1 or len(activations)==0
     layers = {}
     lin_layers = {}
     _activations = {}
     for _ in range(len(sizes)-1):
-        lin_layers[f"layer_{_}"] = create_lin_layer(sizes[_], sizes[_+1])
+        lin_layers[f"layer_{_}"] = create_lin_layer(sizes[_], sizes[_+1], key=key)
         
     for _ in range(len(activations)):
         _activations[f"act_{_}"] = activations[_]
@@ -44,7 +46,7 @@ def create_ff(sizes, activations):
 
 
 def ff_forward(layers, x):
-    for i in range(len(layers)):
+    for i in range(len(layers)-1):
         l = layers[f"layer_{i}"]
         x = linear_forward(l[0], l[1], x)
         x = relu(x)
@@ -53,7 +55,8 @@ def ff_forward(layers, x):
         #     if a is not None:
         #         if a == "relu":
         #             x = relu(x)
-    return x
+    l = layers[f"layer_{len(layers)-1}"]
+    return linear_forward(l[0], l[1], x)
 
 @jax.jit
 def relu(x):

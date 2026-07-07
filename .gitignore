@@ -27,3 +27,5 @@ wheels/
 data/*
 bin/*
 runs/*
+*.db
+*.pkl

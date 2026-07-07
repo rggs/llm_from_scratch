@@ -6,7 +6,7 @@ import sys
 
 def dropout(arr, key, P=0.1, train=True):
     if not train or P==0.0:
-        return x
+        return arr
     
     prob = 1-P
     # First generate a uniform random matrix with the same shape as arr

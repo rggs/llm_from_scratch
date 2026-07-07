@@ -7,7 +7,7 @@ SPECIAL_TOKENS = ["<pad>", "<unk>", "<bos>", "<eos>"]
 PAD_IDX=0
 
 class WMTDataLoader:
-    def __init__(self, filepath, batch_size=32, shuffle=True):
+    def __init__(self, filepath, batch_size=32, shuffle=True, max_length=256):
         # We should be able to just read in the files and hold them in memory, they aren't that large
         self.data = []
         with open(filepath, "r") as f:
@@ -15,6 +15,7 @@ class WMTDataLoader:
                 self.data.append(json.loads(row))
         self.batch_idxs = []
         self.batch_size=batch_size
+        self.max_length = max_length
 
     def __len__(self):
         return len(self.data)
@@ -25,8 +26,8 @@ class WMTDataLoader:
             de = []
             en = []
             # Make the default max_length 256. This way, most batches will have padded length 256 and jit won't have to recalculate
-            max_en_len = 256
-            max_de_len = 256
+            max_en_len = 128
+            max_de_len = 128
             for i in idxs:
                 de.append(self.data[i]["de"])
                 en.append(self.data[i]["en"])
@@ -37,11 +38,16 @@ class WMTDataLoader:
                     max_en_len = len(en[-1])
             
             # This would be more efficient in the previous loop, but this is fine for now
+            # en_length = min(max_en_len, self.max_length)
+            # de_length = min(max_de_len, self.max_length)
+            en_length = self.max_length
+            de_length = self.max_length
             for i in range(len(en)):
-                if len(en[i]) < max_en_len:
-                    en[i] = en[i] + [PAD_IDX]*(max_en_len - len(en[i]))
-                if len(de[i]) < max_de_len:
-                    de[i] = de[i] + [PAD_IDX]*(max_de_len - len(de[i]))
+                en[i] = en[i][:en_length]
+                en[i] = en[i] + [PAD_IDX]*(en_length - len(en[i]))
+
+                de[i] = de[i][:de_length]
+                de[i] = de[i] + [PAD_IDX]*(de_length - len(de[i]))
 
             yield (jnp.array(en), jnp.array(de))
 

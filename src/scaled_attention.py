@@ -6,13 +6,14 @@ import jax.numpy as jnp
 def ScaledDotProductAttention(Q,K,V, mask=None):
     kq = Q @ jnp.swapaxes(K, -1, -2)
     if mask is not None:
-        kq = kq * mask
-    kq = kq / jnp.sqrt(K.size)
+        kq = jnp.where(mask == 1, kq, -1e9)
+    kq = kq / jnp.sqrt(K.shape[-1])
     kq = softmax(kq)
     return kq @ V
 
 
 def softmax(z):
+    z = z - jnp.max(z, axis=-1, keepdims=True)
     return jnp.exp(z) / jnp.sum(jnp.exp(z), axis=-1, keepdims=True)
 
 def log_softmax(z):
